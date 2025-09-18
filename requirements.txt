@@ -1,0 +1,11 @@
+# requirements.txt
+
+# NEW requirements.txt
+fastapi
+uvicorn
+python-multipart
+Pillow
+numpy
+torch
+torchvision
+# Or if you use PyTorch, add 'torch' and 'torchvision'
