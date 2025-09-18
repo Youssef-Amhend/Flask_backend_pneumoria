@@ -5,6 +5,7 @@ from PIL import Image
 import torchvision.transforms as transforms
 import io
 import os
+import gc
 
 # --- 1. Define your PyTorch Model Architecture ---
 class SimpleCNN(nn.Module):
@@ -49,28 +50,53 @@ class SimpleCNN(nn.Module):
 # --- 2. Initialize the Flask App ---
 app = Flask(__name__)
 
-# --- 3. Load the PyTorch Models ---
+# --- 3. Model Loading (Lazy Loading) ---
 # Use CPU for Vercel deployment (no GPU available)
 device = torch.device("cpu")
 
-# Instantiate the model architecture
-model1 = SimpleCNN().to(device)
-model2 = SimpleCNN().to(device)
-
-# Load the learned weights from the .pth files
-# Use absolute paths for Vercel deployment
+# Global variables for models (will be loaded on first use)
+model1 = None
+model2 = None
 model_path = os.path.join(os.path.dirname(__file__), '..', 'model')
-try:
-    model1.load_state_dict(torch.load(os.path.join(model_path, 'best_cnn_model.pth'), map_location=device))
-    model2.load_state_dict(torch.load(os.path.join(model_path, 'best_cnn_model.pth'), map_location=device))
-    print("Models loaded successfully")
-except FileNotFoundError as e:
-    print(f"Error loading model files: {e}")
-    print("Please ensure model files are in the 'model' directory.")
+
+def load_model(model_id):
+    """Lazy load models to reduce memory usage during startup"""
+    global model1, model2
     
-# Set models to evaluation mode
-model1.eval()
-model2.eval()
+    if model_id == "1" and model1 is None:
+        print("Loading model 1...")
+        model1 = SimpleCNN().to(device)
+        try:
+            model1.load_state_dict(torch.load(
+                os.path.join(model_path, 'best_cnn_model.pth'), 
+                map_location=device,
+                weights_only=True  # Safer loading
+            ))
+            model1.eval()
+            print("Model 1 loaded successfully")
+            # Force garbage collection to free up memory
+            gc.collect()
+        except FileNotFoundError as e:
+            print(f"Error loading model 1: {e}")
+            return None
+    elif model_id == "2" and model2 is None:
+        print("Loading model 2...")
+        model2 = SimpleCNN().to(device)
+        try:
+            model2.load_state_dict(torch.load(
+                os.path.join(model_path, 'best_cnn_model.pth'), 
+                map_location=device,
+                weights_only=True  # Safer loading
+            ))
+            model2.eval()
+            print("Model 2 loaded successfully")
+            # Force garbage collection to free up memory
+            gc.collect()
+        except FileNotFoundError as e:
+            print(f"Error loading model 2: {e}")
+            return None
+    
+    return model1 if model_id == "1" else model2
 
 # --- 4. Define Image Preprocessing ---
 preprocess = transforms.Compose([
@@ -106,14 +132,21 @@ def process_image():
         img_tensor = preprocess(image)
         img_tensor = img_tensor.unsqueeze(0).to(device) # Add batch dimension and send to device
 
-        # Select the model and perform prediction
-        selected_model = model1 if model_n == "1" else model2
+        # Load the model (lazy loading)
+        selected_model = load_model(model_n)
+        if selected_model is None:
+            return jsonify({"error": "Failed to load model"}), 500
         
         # Disable gradient calculations for inference
         with torch.no_grad():
             output = selected_model(img_tensor)
             # Apply sigmoid to get a probability and extract the value
             probability = torch.sigmoid(output).item()
+        
+        # Clear GPU cache and force garbage collection
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
         
         print(f"Probability: {probability}")
         

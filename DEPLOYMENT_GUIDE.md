@@ -109,6 +109,14 @@ with open('path/to/image.jpg', 'rb') as f:
 
 ## Important Notes
 
+### Memory Optimization (Fixed OOM Issues)
+
+- **CPU-Only PyTorch**: Using `torch==1.13.1+cpu` and `torchvision==0.14.1+cpu` to reduce memory usage
+- **Lazy Loading**: Models are loaded only when first requested, not during startup
+- **Garbage Collection**: Added automatic memory cleanup after model loading and inference
+- **Safer Loading**: Using `weights_only=True` for safer model loading
+- **Vercel Config**: Added `maxLambdaSize: "50mb"` and `maxDuration: 30` for better resource management
+
 ### Model Files
 
 - Your model files (`best_cnn_model.pth`, `best_model.pth`) are included in the deployment
