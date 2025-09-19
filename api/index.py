@@ -1,70 +1,35 @@
-import torch
-import torch.nn as nn
+# Minimal imports to reduce build memory
 from flask import Flask, jsonify, request
-from PIL import Image
-import torchvision.transforms as transforms
-import io
 import os
 import gc
 
-# --- 1. Define your PyTorch Model Architecture ---
-class SimpleCNN(nn.Module):
-    def __init__(self):
-        super(SimpleCNN, self).__init__()
-        # Based on the actual saved model architecture
-        self.conv_block1 = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2)
-        )
-        self.conv_block2 = nn.Sequential(
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2)
-        )
-        self.conv_block3 = nn.Sequential(
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2)
-        )
-        self.fc = nn.Sequential(
-            # Input size: 128 channels * 18x18 (after 3 max pools from 144x144) = 41472
-            nn.Dropout(0.5),  # fc.0
-            nn.Linear(128 * 18 * 18, 256),  # fc.1
-            nn.ReLU(),  # fc.2
-            nn.Dropout(0.5),  # fc.3
-            nn.Linear(256, 1)  # fc.4 - Output is a single value for binary classification
-        )
-
-    def forward(self, x):
-        x = self.conv_block1(x)
-        x = self.conv_block2(x)
-        x = self.conv_block3(x)
-        x = x.view(x.size(0), -1) # Flatten the feature maps
-        x = self.fc(x)
-        return x
+# --- 1. Model definition is in separate file to reduce build memory ---
 
 # --- 2. Initialize the Flask App ---
 app = Flask(__name__)
 
-# --- 3. Model Loading (Lazy Loading) ---
-# Use CPU for Vercel deployment (no GPU available)
-device = torch.device("cpu")
-
+# --- 3. Model Loading (Ultra Lazy Loading) ---
 # Global variables for models (will be loaded on first use)
 model1 = None
 model2 = None
 model_path = os.path.join(os.path.dirname(__file__), '..', 'model')
 
 def load_model(model_id):
-    """Lazy load models to reduce memory usage during startup"""
+    """Ultra lazy load models to minimize build memory usage"""
     global model1, model2
+    
+    # Import PyTorch only when needed
+    import torch
+    import torch.nn as nn
+    from PIL import Image
+    import torchvision.transforms as transforms
+    
+    device = torch.device("cpu")
     
     if model_id == "1" and model1 is None:
         print("Loading model 1...")
+        from .model_def import get_model_class
+        SimpleCNN = get_model_class()
         model1 = SimpleCNN().to(device)
         try:
             model1.load_state_dict(torch.load(
@@ -81,6 +46,8 @@ def load_model(model_id):
             return None
     elif model_id == "2" and model2 is None:
         print("Loading model 2...")
+        from .model_def import get_model_class
+        SimpleCNN = get_model_class()
         model2 = SimpleCNN().to(device)
         try:
             model2.load_state_dict(torch.load(
@@ -98,13 +65,16 @@ def load_model(model_id):
     
     return model1 if model_id == "1" else model2
 
-# --- 4. Define Image Preprocessing ---
-preprocess = transforms.Compose([
-    transforms.Grayscale(num_output_channels=1), # Convert to grayscale
-    transforms.Resize((144, 144)),               # Resize the image to match training size
-    transforms.ToTensor(),                       # Convert image to tensor
-    transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize
-])
+# --- 4. Image Preprocessing (loaded on demand) ---
+def get_preprocess():
+    """Get preprocessing transforms only when needed"""
+    import torchvision.transforms as transforms
+    return transforms.Compose([
+        transforms.Grayscale(num_output_channels=1), # Convert to grayscale
+        transforms.Resize((144, 144)),               # Resize the image to match training size
+        transforms.ToTensor(),                       # Convert image to tensor
+        transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize
+    ])
 
 # --- 5. Set up CORS Headers ---
 def add_cors_headers(response):
@@ -122,11 +92,19 @@ def process_image():
         return jsonify({"error": "No image provided"}), 400
 
     try:
+        # Import required modules only when needed
+        import torch
+        from PIL import Image
+        
         image_file = request.files['image']
         model_n = request.form.get('model', '1')  # Default to model 1 if not specified
         
         # Open the image file
         image = Image.open(image_file.stream).convert('RGB')
+        
+        # Get preprocessing transforms
+        preprocess = get_preprocess()
+        device = torch.device("cpu")
         
         # Preprocess the image and add a batch dimension
         img_tensor = preprocess(image)

@@ -7,6 +7,10 @@
       "config": {
         "maxLambdaSize": "50mb"
       }
+    },
+    {
+      "src": "api/model_def.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
