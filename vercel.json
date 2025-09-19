@@ -5,12 +5,9 @@
       "src": "api/index.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "50mb"
+        "maxLambdaSize": "50mb",
+        "maxDuration": 30
       }
-    },
-    {
-      "src": "api/model_def.py",
-      "use": "@vercel/python"
     }
   ],
   "routes": [
@@ -22,10 +19,5 @@
       "src": "/(.*)",
       "dest": "/api/index.py"
     }
-  ],
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
