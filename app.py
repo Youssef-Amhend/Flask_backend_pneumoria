@@ -4,6 +4,7 @@ from flask import Flask, jsonify, request
 from PIL import Image
 import torchvision.transforms as transforms
 import io
+import os
 
 # --- 1. Define your PyTorch Model Architecture ---
 # IMPORTANT: This class MUST exactly match the architecture of the model
@@ -61,12 +62,16 @@ model2 = SimpleCNN().to(device)
 
 # Load the learned weights from the .pth files
 # Update these paths to where your model files are located.
+# Construct an absolute path to the model files
+basedir = os.path.abspath(os.path.dirname(__file__))
+model_path = os.path.join(basedir, 'model', 'best_cnn_model.pth')
+
 try:
-    model1.load_state_dict(torch.load('./model/best_cnn_model.pth', map_location=device))
-    model2.load_state_dict(torch.load('./model/best_cnn_model.pth', map_location=device))
+    model1.load_state_dict(torch.load(model_path, map_location=device))
+    model2.load_state_dict(torch.load(model_path, map_location=device))
 except FileNotFoundError as e:
     print(f"Error loading model files: {e}")
-    print("Please ensure 'pneumonia_detection_model_v1.pth' and 'pneumonia_detection_model_v2.pth' are in a 'model' subfolder.")
+    print("Please ensure 'best_cnn_model.pth' is in a 'model' subfolder.")
     # Exit or handle as needed if models are essential
     
 # Set models to evaluation mode (important for layers like dropout and batch norm)
