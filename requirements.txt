@@ -1,5 +1,7 @@
-Flask
-Pillow
-torch
-torchvision
-numpy
+--extra-index-url https://download.pytorch.org/whl/cpu
+Flask==3.0.0
+Pillow==10.1.0
+torch==2.1.2
+torchvision==0.16.2
+numpy==1.26.2
+gunicorn==21.2.0
